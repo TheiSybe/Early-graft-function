@@ -1,0 +1,493 @@
+
+######### to choose cutoff for the CIT
+
+#subset for the test (no longer statistically significant from 2014 on)
+NOTR_DGF.df$CIT_hour <- NOTR_DGF.df$Cold_ischaemic_period/60
+
+### make supplemental figure of average CIT
+NOTR_CIT_compare <- subset(NOTR_DGF.df, Year_Of_Tx < 2023) %>% group_by(Year_Of_Tx, Donor_type_deceased) %>% dplyr::summarize(gem = mean(na.omit(
+  Cold_ischaemic_period
+)), sd = sd(na.omit(
+  Cold_ischaemic_period
+))) %>%  as.data.frame()
+
+NOTR_CIT_compare <- NOTR_CIT_compare[!is.na(NOTR_CIT_compare$Donor_type_deceased),]
+NOTR_CIT_compare$gem_hour <- NOTR_CIT_compare$gem/60
+
+
+
+## Plot the CIT progression over the years
+ggplot(NOTR_CIT_compare, aes(x = as.factor(Year_Of_Tx) , y = gem_hour, group = Donor_type_deceased, col =Donor_type_deceased)) + 
+  geom_line() +
+  theme_stata()+
+  geom_vline(xintercept = "2014" , linetype = "dashed")+ 
+  ggtitle("Average cold ischemia time per year") +
+  xlab("") + ylab("Cold ischemia time (hours)")+
+  labs(col="Donor type") + ylim(c(0,25))+
+  theme(legend.position="right") + scale_color_manual(values = c("Black", "#E57588" ))+
+  theme(axis.text.x = element_text(angle = 45)) 
+
+
+### The outcome analyses
+# first we'll make the subsets that are presented in the study
+
+# all cases including those with missing information on DGF
+NOTR_deceased <- subset(NOTR_DGF.df,
+                              Year_Of_Tx > 2013
+                              & Year_Of_Tx < 2023
+                              &  Typeofdonor=='Deceased' 
+                              & Recipientage >17
+                              & Donorage >17
+                              & Number_of_transplantations==1
+                              & (Combinedtransplants=='LKi'
+                                 | Combinedtransplants=='RKi') 
+                              & is.na(Transatl)
+                              & PT_Earlydeath ==0
+)
+
+# the included main cohort
+NOTR_deceased.excl1 <- subset(NOTR_DGF.df,
+                              Year_Of_Tx > 2013
+                              & Year_Of_Tx < 2023
+                              &  Typeofdonor=='Deceased' 
+                              & Recipientage >17
+                              & Donorage >17
+                              & Number_of_transplantations==1
+                              & (Combinedtransplants=='LKi'
+                                 | Combinedtransplants=='RKi') 
+                              & is.na(Transatl)
+                              & !is.na(dDGF)
+                              & PT_Earlydeath ==0
+)
+# the included main cohort incl PNF for DBD v DCD
+NOTR_deceased.excl1 <- subset(NOTR_DGF.df,
+                              Year_Of_Tx > 2013
+                              & Year_Of_Tx < 2023
+                              &  Typeofdonor=='Deceased' 
+                              & Recipientage >17
+                              & Donorage >17
+                              & Number_of_transplantations==1
+                              & (Combinedtransplants=='LKi'
+                                 | Combinedtransplants=='RKi') 
+                              & is.na(Transatl)
+                              & !is.na(dDGF)
+                              & PT_Earlydeath ==0
+)
+
+# the included main cohort exclude PNF for DGF outcome analysis
+NOTR_deceased.excl2 <- subset(NOTR_DGF.df,
+                              Year_Of_Tx > 2013
+                              & Year_Of_Tx < 2023
+                              &  Typeofdonor=='Deceased' 
+                              & Recipientage >17
+                              & Donorage >17
+                              & Number_of_transplantations==1
+                              & (Combinedtransplants=='LKi'
+                                 | Combinedtransplants=='RKi') 
+                              & is.na(Transatl)
+                              & !is.na(dDGF)
+                              & PT_Earlydeath ==0
+                              & PNF == 0
+)
+# the subsets in which we looked at plasma creatinine
+
+#### Data of DGF groups imputed creatinine  (replace "Donor_type_deceased" in the CICR and cox regressions by "Early_graft_function")
+NOTR_deceased_DGF <- NOTR_DGF_creatinine.df
+
+
+#### Data of DGF groups imputed creatinine DBD (replace "Donor_type_deceased" in the CICR and cox regressions by "Early_graft_function")
+NOTR_deceased_DGF_DBD <-
+  subset(NOTR_DGF_creatinine.df, Donor_type_deceased == "DBD")
+
+
+#### Data of DGF groups imputed creatinine DCD (replace "Donor_type_deceased" in the CICR and cox regressions by "Early_graft_function")
+NOTR_deceased_DGF_DBD <-
+  subset(NOTR_DGF_creatinine.df, Donor_type_deceased == "DCD")
+
+## Change variable of interest and data frame for each step in the study
+
+#### Competing risk analysis DBD v DCD 
+tidycmprsk::cuminc(Surv(time, status2) ~  Donor_type_deceased, NOTR_deceased.excl1) %>%
+  ggcuminc(outcome = c("1", "2"), size = 1) +
+  add_risktable(risktable_stats = "{n.risk} ({cum.event})") +
+  scale_ggsurvfit() +
+  xlim(c(0, 2000)) + scale_linetype_manual(
+    name = "Outcome",
+    labels = c("Graft loss", "Death"),
+    values = c("solid", "22")
+  ) +
+  scale_color_manual(
+    name = "",
+    values = c(4, 2),
+  ) + ggtitle(
+    "Death-censored graft loss in DBD and DCD"
+  ) + ylab ("Cumulative incidence") + xlab("Time (days)") + 
+  theme(axis.text.x = element_text(size = 12),
+        axis.title.y = element_text(size = 14),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        legend.position = "right")
+
+# Table - Summary table
+tidycmprsk::cuminc(Surv(time, status2) ~ Donor_type_deceased , NOTR_deceased.excl1) %>% 
+  tbl_cuminc(times = seq(from=0, to=2000,by=365),
+             outcomes = c("1","2"),
+             label_header = "**Days {time}**") %>%
+  add_p() %>%
+  add_nevent(location = c("label", "level")) %>%
+  add_n(location = c("label", "level"))
+
+### to get more precise numbers of the CICR we have to use a different package (not tydy)
+cmprsk_donortype <-
+  cmprsk::cuminc(NOTR_deceased$time,
+                 NOTR_deceased$status2,
+                 group = NOTR_deceased$Donor_type_deceased) 
+cmprsk::print.cuminc(cmprsk_donortype)
+
+cmprsk::timepoints(cmprsk_donortype,c(0,365,1095,1825))
+
+cmprsk_donortype.cohort <-
+  cmprsk::cuminc(NOTR_deceased.baseline$time,
+                 NOTR_deceased.baseline$status2,
+                 group = NOTR_deceased.baseline$Donor_type_deceased) 
+cmprsk::print.cuminc(cmprsk_donortype.cohort)
+
+timepnt <- cmprsk::timepoints(cmprsk_donortype.cohort,c(0,365,1095,1825))
+timepnt
+timepnt$est - 1.96*sqrt(timepnt$var)
+timepnt$est + 1.96*sqrt(timepnt$var)
+
+
+##### cox ANALYSIS
+
+### unad cox death-censored graft loss
+summary(coxph(Surv(Follow_up_time, status2==1) ~ early_graft_function , data = subset(NOTR_DGF_creatinine.df, Donor_type_deceased == "DCD")))
+
+### unad cox mortality
+summary(coxph(Surv(Follow_up_time, PT_Death) ~ Donor_type_deceased , data = NOTR_deceased.excl1))
+
+#to get the adjusted hazard ratios we'll first have to impute some variables with mice
+# because we are using two data sets, replace variables and df with the one(s) you are interested in. In this example we'll run it for the 
+#creatinine df and look at early graft function
+NOTR.imp <-NOTR_DGF_creatinine.df%>% 
+  select( c("ID","fictiefrecipientnummer", "dDGF", "Follow_up_time",
+            'Recipientage','Recipientsex',"early_graft_function",
+            "Recipient_weight" ,  "HLA_mismatch", 
+            "Recipient_height" , "Recipient_age.cat", "Donor_age.cat",
+            "Recipient_Diabetes", "Year_Of_Tx", "PT_Death" ,
+            "Warm_ischaemic_period_2" ,"DonorDeathGroup.dbd","DonorDeathGroup.dbd2","DonorDeathGroup.dcd",
+            "Cold_ischaemic_period" , "status2",
+            "Recipientsex",
+            "Donor_type_deceased",
+            "Donorsex", "Donorage", 
+            "Smoking",	"Donorheight", "Donorweight",
+            "Lastcreatinineµmoll" ))
+
+
+
+
+## Change ID variables character -> numeric to avoid factoring. Factored ID cols will make mice think they need to be used in imputation
+NOTR.imp$ID <- as.numeric(NOTR.imp$ID)
+NOTR.imp$fictiefrecipientnummer <- as.numeric(NOTR.imp$fictiefrecipientnummer)
+
+
+# Identify the other character variables in the data frame
+character_variables <- sapply(NOTR.imp, is.character)
+
+# Convert the character variables to factors
+NOTR.imp[, character_variables] <- lapply(NOTR.imp[, character_variables], as.factor)
+
+
+### To impute
+init = mice(NOTR.imp, maxit=0) 
+meth = init$method
+pred = mice::make.predictorMatrix(NOTR.imp)
+
+## Set predictionMatrix
+pred[, c(
+  "fictiefrecipientnummer",
+  "DonorDeathGroup.dbd2",
+  "DonorDeathGroup.dcd",
+  "ID",
+  "Recipient_age.cat",
+  "early_graft_function",
+  "Donor_age.cat",
+  "Follow_up_time",
+  "Year_Of_Tx",
+  "PT_Death"
+)] <- 0
+
+# change variables that should not be imputed
+meth[c(
+  "dDGF",
+  "Follow_up_time",
+  "early_graft_function",
+  "Recipient_age.cat",
+  "Donor_age.cat",
+  "status2",
+  "Year_Of_Tx",
+  "PT_Death"
+)] <- ""
+
+# MICE
+imp.qpalgem <- mice(NOTR.imp, meth = meth, predictorMatrix = pred, seed =1, maxit= 20, m=20)
+
+imp.qpalgem$loggedEvents
+
+imp.qpalgem$data$Recipient_BMI <- imp.qpalgem$data$Recipient_weight/((imp.qpalgem$data$Recipient_height/100)^2)
+
+
+#Adjusted
+fit.impalgem.gl.cox <-
+  with(
+    filter(imp.qpalgem, Donor_type_deceased == "DCD"),
+    coxph(
+      Surv(Follow_up_time, status2 == 1) ~ early_graft_function +  Donorsex  + DonorDeathGroup.dcd +
+        Recipientsex + HLA_mismatch + Recipientage +Donorage+
+        Recipient_BMI + Recipient_Diabetes + Year_Of_Tx +
+        Cold_ischaemic_period + Warm_ischaemic_period_2  + Lastcreatinineµmoll
+    )
+  )
+
+
+fit.impalgem.mort.cox <-
+  with(
+    filter(imp.qpalgem, Donor_type_deceased == "DCD"),
+    coxph(
+      Surv(Follow_up_time, PT_Death) ~ early_graft_function +  Donorsex  + DonorDeathGroup.dcd +
+        Recipientsex + HLA_mismatch + Recipientage+Donorage+
+        Recipient_BMI + Recipient_Diabetes +  Year_Of_Tx +
+        Cold_ischaemic_period + Warm_ischaemic_period_2  + Lastcreatinineµmoll
+    )
+  )
+
+
+# here we check the schoenfeld residuals for some random completed imputations
+check.impalgem.gl.cox <-
+  cox.zph(
+    coxph(
+      Surv(Follow_up_time, status2 == 1) ~ early_graft_function +  Donorsex + DonorDeathGroup.dcd +
+        Recipientsex + HLA_mismatch + Recipientage +Donorage+
+        Recipient_BMI + Recipient_Diabetes + Year_Of_Tx +
+        Cold_ischaemic_period + Warm_ischaemic_period_2  + Lastcreatinineµmoll,
+      data = complete(filter(imp.qpalgem, Donor_type_deceased == "DCD"),5)
+    )
+  )
+
+
+# here we check the schoenfeld residuals for some random completed imputations
+check.impalgem.mort.cox <-
+  cox.zph(
+    coxph(
+      Surv(Follow_up_time, PT_Death) ~ early_graft_function +  Donorsex + DonorDeathGroup.dcd +
+        Recipientsex + HLA_mismatch + Recipientage+Donorage+
+        Recipient_BMI + Recipient_Diabetes + Year_Of_Tx +
+        Cold_ischaemic_period + Warm_ischaemic_period_2  + Lastcreatinineµmoll,
+      data = complete(filter(imp.qpalgem, Donor_type_deceased == "DCD"),15)
+    )
+  )
+
+### summarize the results
+summary(pool(fit.impalgem.gl.cox), conf.int = T,
+        exponentiate = T)[, c("term", "estimate", "2.5 %", "97.5 %", "p.value")]
+
+summary(pool(fit.impalgem.mort.cox), conf.int = T,
+        exponentiate = T)[, c("term", "estimate", "2.5 %", "97.5 %", "p.value")]
+
+summary(pool(DCDfit.impearly.mort.cox), conf.int = T,
+        exponentiate = T)[, c("term", "estimate", "2.5 %", "97.5 %", "p.value")]
+evalues.RR(est = 1.5084230   , lo = 1.1254485    , hi = 2.0217185   )
+evalues.RR(est = 1.1404679   , lo = 0.7888185      , hi = 1.6488801    )
+
+####### The eGFR analyses
+
+### early graft function egFR 
+
+# only plasma creatinine is registered in the data set so we'll calculate eGFR with the BMI at inclusion
+columns_eGFR <- names(NOTR_DGF_creatinine.df)[grepl("\\bCreatinine.\\b", names(NOTR_DGF_creatinine.df), ignore.case = FALSE)]
+
+NOTR_DGF_creatinine.df.egfr<- NOTR_DGF_creatinine.df%>%
+  select(ID, Recipientage, Recipientsex, columns_eGFR) %>%
+  gather(day, creatinine, columns_eGFR, factor_key = TRUE)
+
+# Using ethnicity is not recomended in Europe
+NOTR_DGF_creatinine.df.egfr$ethnicity <- 0
+
+
+# we use the 2009 formula in the ckd-epi package
+NOTR_DGF_creatinine.df.egfr <- NOTR_DGF_creatinine.df.egfr %>%
+  mutate(eGFR = ckd_epi(creat = creatinine, age = Recipientage, sex = Recipientsex, ethnicity = ethnicity))
+
+
+# check if it looks ok
+summary(NOTR_DGF_creatinine.df.egfr$eGFR)
+
+# now for the variable/column names 
+NOTR_DGF_creatinine.df.egfr <- select(NOTR_DGF_creatinine.df.egfr, ID, eGFR,day)
+NOTR_DGF_creatinine.df.egfr$day <-
+  factor(
+    NOTR_DGF_creatinine.df.egfr$day,
+    levels = c( 
+                "Creatinine.M3" ,
+                "Creatinine.Y01",
+                "Creatinine.Y02",
+                "Creatinine.Y03" ,
+                "Creatinine.Y04",
+                "Creatinine.Y05",
+                "Creatinine.Y06",
+                "Creatinine.Y07" ,
+                "Creatinine.Y08",
+                "Creatinine.Y09" ,
+                "Creatinine.Y10",
+                "Creatinine.Y11",
+                "Creatinine.Y12",
+                "Creatinine.Y13" ,
+                "Creatinine.Y14",
+                "Creatinine.Y15",
+                "Creatinine.Y16" ,
+                "Creatinine.Y17",
+                "Creatinine.Y18" ,
+                "Creatinine.Y19" ,
+                "Creatinine.Y20",
+                "Creatinine.Y21",
+                "Creatinine.Y22",
+                "Creatinine.Y23",
+                "Creatinine.END"
+    ),
+    labels = c(
+                'eGFR.M3',
+                'eGFR.Y01',
+                'eGFR.Y02',
+                'eGFR.Y03',
+                'eGFR.Y04',
+                'eGFR.Y05',
+                'eGFR.Y06',
+                'eGFR.Y07',
+                'eGFR.Y08',
+                'eGFR.Y09',
+                'eGFR.Y10',
+                'eGFR.Y11',
+                'eGFR.Y12',
+                'eGFR.Y13',
+                'eGFR.Y14',
+                'eGFR.Y15',
+                'eGFR.Y16',
+                'eGFR.Y17',
+                'eGFR.Y18',
+                'eGFR.Y19',
+                'eGFR.Y20',
+                'eGFR.Y21',
+                'eGFR.Y22',
+                'eGFR.Y23',
+                'eGFR.END'
+    )
+  )
+
+# back to wide format
+NOTR_DGF_creatinine.df.egfr.short <- spread(NOTR_DGF_creatinine.df.egfr[,!names(NOTR_DGF_creatinine.df.egfr) %in% c("fictiefrecipientnummer")], "day", "eGFR")
+
+# add the eGFR's to the dataset
+NOTR_DGF_creatinine_creat_egfr.df<- merge(NOTR_DGF_creatinine.df, NOTR_DGF_creatinine.df.egfr.short, by.x = "ID", by.y = "ID")
+
+## Done with the data cleaning. on to the creatinine imputation
+
+
+early_eGFR <- tidyr::gather(NOTR_DGF_creatinine_creat_egfr.df,dayn,eGFR,c(eGFR.M3,
+                                                 eGFR.Y01, eGFR.Y02,eGFR.Y03,eGFR.Y04, eGFR.Y05) )  
+
+early_eGFR$day <- factor(
+  early_eGFR$dayn,
+  levels = c(
+    c(
+      "eGFR.M3",
+      "eGFR.Y01",
+      "eGFR.Y02",
+      "eGFR.Y03",
+      "eGFR.Y04",
+      "eGFR.Y05"
+    )
+  ),
+  labels = c("3mn", "1yr", "2yr", "3yr", "4yr", "5yr")
+)
+
+
+
+### Mixed model to plot and analize effect of early graft funciton on eGFr stratified results for all groups
+early_eGFR.fit <- lmer(log(eGFR) ~ early_graft_function*Donor_type_deceased * day +  (1 |ID), data = early_eGFR, REML =T)
+summary(early_eGFR.fit)
+
+
+early_eGFR.pred <-
+  ggpredict(early_eGFR.fit, terms = c("day", "Donor_type_deceased", "early_graft_function"))
+
+early_eGFR.plot <-
+  plot(early_eGFR.pred,
+       ci.style = "errorbar",
+       connect.lines = T)
+
+
+# Plotting
+early_eGFR.plot +
+  ggtitle("Average five-year eGFR in DBD and DCD grafts grouped by early graft function") +
+  scale_color_manual(
+    values = c(4, 2)) +
+  ylim(c(18, 43)) +
+  xlab("") + ylab("eGFR in ml/min/1.73m2") + labs(col = "Donor type") +
+  theme(
+    axis.text.x = element_text(angle = 30, size = 12),
+    axis.text.y = element_text(angle = 0, size = 12)
+  )  
+
+
+
+
+##### Forest plot for adjusted hazard ratios
+
+forest_data <-
+  tibble::tibble(
+    mean  = c(1, 2.82, 2.30, 1, 1.54, 2.52),
+    lower = c(1, 1.34, 1.27, 1, 0.72, 1.39),
+    upper = c(1, 5.93, 4.14, 1, 3.35, 4.59),
+    donor_group = c("DBD", "", "", "DCD", "", ""),
+    early_graft_function = c("Immediate graft function",
+                             "Slow graft function",
+                             "Delayed graft function",
+                             "Immediate graft function",
+                             "Slow graft function",
+                             "Delayed graft function"),
+    aHR = c("Ref.", "2.82", "2.30", "Ref.", "1.54 ",
+            "2.52 "),
+    CI = c(
+      "",
+      "(1.34 - 5.93)",
+      "(1.27 - 4.14)",
+      "",
+      "(0.72 - 3.35)",
+      "(1.39 - 4.59)"
+    ),
+    p = c("", "0.007", "0.007", "", "0.262", "0.003")
+  )
+
+
+custom_colors <- c("Black" ,"#298c8c", "#298c8c","#298c8c", "#f55f74","#f55f74","#f55f74")
+
+
+forestplot.HR <- forest_data %>%
+  forestplot(labeltext = c(donor_group, early_graft_function, aHR, CI,p),
+             clip = c(0, 8.0),
+             zero = 1,
+             cex =6,
+             align = c("l", "l", "l"),
+             lineheight = "auto",
+             txt_gp = fpTxtGp(ticks=gpar(cex=1),xlab=gpar(cex=1)),
+             xlab = "aHR") %>%
+  fp_set_style(box = custom_colors, 
+                                            line = custom_colors)%>% 
+  fp_add_header(donor_group = c("Donor type"),
+                early_graft_function = c("Early graft function"),
+                aHR = c("aHR"),
+                CI = c("95% CI"),
+                p = c("p value")) 
+
+forestplot.HR
+
